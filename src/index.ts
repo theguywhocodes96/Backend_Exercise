@@ -1,5 +1,7 @@
-import fetch from 'cross-fetch'
-import taxRates from './data/taxRate.json'
+import fetch from 'cross-fetch';
+import _taxRates from './data/taxRate.json' assert { type: "json" };
+import _importedItems from './data/importedItems.json' assert { type: "json" };
+import _records from './data/records.json' assert { type: "json" };
 
 /**
  * Get site titles of cool websites.
@@ -10,6 +12,7 @@ import taxRates from './data/taxRate.json'
  * @returns array of strings
  */
 export async function returnSiteTitles() {
+
   const urls = [
     'https://patientstudio.com/',
     'https://www.startrek.com/',
@@ -17,22 +20,29 @@ export async function returnSiteTitles() {
     'https://www.neowin.net/'
   ]
 
-  const titles = []
+  let titles = [];
 
-  for (const url of urls) {
-    const response = await fetch(url, { method: 'GET' })
+  titles = await Promise.all(urls.map(async (url) => {
+    const response = await fetch(url, { method: 'GET' });
 
     if (response.status === 200) {
-      const data = await response.text()
-      const match = data.match(/<title>(.*?)<\/title>/)
+
+      const data = await response.text();
+
+      const match = data.match(/<title>(.*?)<\/title>/);
+
       if (match?.length) {
-        titles.push(match[1])
+        titles.push(match[1]);
+        return match[1];
       }
     }
-  }
+  }));
 
-  return titles
+  console.log('titles: ',titles);
+  return titles;
 }
+
+// returnSiteTitles();
 
 /**
  * Count the tags and organize them into an array of objects.
@@ -44,26 +54,30 @@ export async function returnSiteTitles() {
  * @returns array of objects
  */
 export function findTagCounts(localData: Array<SampleDateRecord>): Array<TagCounts> {
-  const tagCounts: Array<TagCounts> = []
+  const tagCounts: Array<TagCounts> = [];
 
   for (let i = 0; i < localData.length; i++) {
-    const tags = localData[i].tags
+    const tags = localData[i].tags;
 
     for (let j = 0; j < tags.length; j++) {
-      const tag = tags[j]
-
-      for (let k = 0; k < tagCounts.length; k++) {
-        if (tagCounts[k].tag === tag) {
-          tagCounts[k].count++
-        } else {
-          tagCounts.push({ tag, count: 1 })
-        }
+      const tag = tags[j];
+      
+      let pushedTags = tagCounts.find(tagCount => tagCount?.tag === tag);
+      if (pushedTags?.tag === tag) {
+        pushedTags.count++
+      }
+      else {
+        tagCounts.push({ tag, count: 1 })
       }
     }
   }
+  
+  console.log('tagCounts:' ,tagCounts);
+  return tagCounts;
 
-  return tagCounts
 }
+
+// findTagCounts(_records);
 
 /**
  * Calcualte total price
@@ -78,6 +92,34 @@ export function findTagCounts(localData: Array<SampleDateRecord>): Array<TagCoun
  *  - if the imported item is on the "category exceptions" list, then no tax rate applies
  */
 export function calcualteImportCost(importedItems: Array<ImportedItem>): Array<ImportCostOutput> {
-  // please write your code in here.
-  // note that `taxRate` has already been imported for you
+  const importCostOutput: Array<ImportCostOutput> = [];
+  const taxRates: Array<ImportTaxRate> = _taxRates;
+
+  for (let i = 0; i < importedItems.length; i++) {
+    const item = importedItems[i];
+
+    const tax: any = taxRates.find(taxRate => taxRate.country == item.countryDestination);
+
+    let importCost;
+    if (tax.categoryExceptions.includes(item.category)) {
+      importCost = item.unitPrice * item.quantity;
+    } else {
+      importCost = item.unitPrice * item.quantity * tax.importTaxRate;
+    }
+
+    let totalCost = importCost + (item.unitPrice * item.quantity);
+
+    importCostOutput.push({
+      name: item.name,
+      subtotal: importCost + totalCost,
+      importCost: importCost,
+      totalCost: totalCost,
+    })
+  }
+
+  console.log('importCostOutput:', importCostOutput);
+  return importCostOutput;
+
 }
+
+// calcualteImportCost(_importedItems);
